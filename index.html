@@ -198,19 +198,21 @@ function submitForm(){const v={};FORM.fields.forEach((f,i)=>{const el=$('#f'+i);
 
 // ===== money / time parsing =====
 function parseMoney(s){s=String(s).toLowerCase().replace(/(\d)\.(\d{3})/g,'$1$2');
- const m=s.match(/(\d+(?:[.,]\d+)?)\s*(triệu|trieu|tr|củ|nghìn|nghin|ngàn|ngan|k|ng|lít|đ|d|vnd)?(?:\s*(\d+))?/);if(!m)return 0;
+ const m=s.match(/(\d+(?:[.,]\d+)?)\s*(triệu|trieu|trăm|tr|củ|nghìn|nghin|ngàn|ngan|k|ng|lít|đồng|đ|d|vnd)?(?![a-zà-ỹđ])(?:\s*(\d+))?/);if(!m)return 0;
  let n=parseFloat(m[1].replace(',','.'));const u=m[2]||'';
- if(/triệu|trieu|tr|củ/.test(u)){n*=1e6;if(m[3])n+=Number(m[3])*Math.pow(10,6-m[3].length)}
- else if(/nghìn|nghin|ngàn|ngan|^k$|^ng$/.test(u))n*=1e3;else if(/lít/.test(u))n*=1e5;else if(!u&&n<1000)n*=1e3;return Math.round(n)}
+ if(/trăm/.test(u))n*=1e5;else if(/triệu|trieu|tr|củ/.test(u)){n*=1e6;if(m[3])n+=Number(m[3])*Math.pow(10,6-m[3].length)}
+ else if(/nghìn|nghin|ngàn|ngan|^k$|^ng$/.test(u))n*=1e3;else if(/^(đồng|đ|d|vnd)$/.test(u)){}else if(/lít/.test(u))n*=1e5;else if(!u&&n<1000)n*=1e3;return Math.round(n)}
 const WD={'chủ nhật':0,'cn':0,'thứ hai':1,'thứ 2':1,'thứ ba':2,'thứ 3':2,'thứ tư':3,'thứ 4':3,'thứ năm':4,'thứ 5':4,'thứ sáu':5,'thứ 6':5,'thứ bảy':6,'thứ 7':6};
 function parseWhen(t){t=t.toLowerCase();let d=new Date(),h=null,mi=0;
  let m=t.match(/(\d{1,2})\s*(?:giờ|h|:)\s*(\d{1,2})?/);if(m){h=+m[1];mi=+(m[2]||0);if(/rưỡi/.test(t))mi=30;if(/(tối|chiều)/.test(t)&&h<12)h+=12;if(/trưa/.test(t)&&h<11)h+=12}
  if(/ngày mai|\bmai\b/.test(t))d.setDate(d.getDate()+1);else if(/ngày kia|\bmốt\b/.test(t))d.setDate(d.getDate()+2);
  else{for(const k in WD)if(t.includes(k)){let diff=(WD[k]-d.getDay()+7)%7;if(diff===0&&(h===null||h<=d.getHours()))diff=7;d.setDate(d.getDate()+diff);break}}
+ {const dd=t.match(/ngày\s+(\d{1,2})(?!\s*\/|\s*tháng)/);if(dd){d=new Date(d.getFullYear(),d.getMonth(),+dd[1]);if(ymd(d)<today())d.setMonth(d.getMonth()+1)}}
+ {const w=parseDate(t);if(w)d=pd(w)}
  m=t.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);if(m){d=new Date(m[3]?(m[3].length==2?2000+ +m[3]:+m[3]):d.getFullYear(),m[2]-1,+m[1])}
  if(h===null)h=/tối/.test(t)?20:/chiều/.test(t)?15:/trưa/.test(t)?12:/sáng/.test(t)?8:9;
  return ymd(d)+'T'+pad(h)+':'+pad(mi)}
-function parseDate(s){const m=String(s).match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);if(m)return m[3]+'-'+pad(m[2])+'-'+pad(m[1]);const n=String(s).match(/(\d{4})-(\d{2})-(\d{2})/);return n?n[0]:''}
+function parseDate(s){{const w=String(s).match(/(\d{1,2})\s*tháng\s*(\d{1,2})(?:\s*(?:năm)?\s*(\d{4}))?/i);if(w&&+w[2]<=12)return (w[3]||new Date().getFullYear())+'-'+pad(w[2])+'-'+pad(w[1])}const m=String(s).match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);if(m)return m[3]+'-'+pad(m[2])+'-'+pad(m[1]);const n=String(s).match(/(\d{4})-(\d{2})-(\d{2})/);return n?n[0]:''}
 
 // ===== domain logic =====
 const hVal=(h,d)=>h.log[d]||0;const hDone=(h,d)=>hVal(h,d)>=h.target;
@@ -291,58 +293,108 @@ Trả về DUY NHẤT JSON {"actions":[...]} . Mỗi action là một trong:
 {"type":"money","items":[{"kind":"chi|thu|chovay|divay","amt":số_VND,"note":"mô tả ngắn","cat":"một danh_muc; nếu không khớp thì ghi tên cụ thể ngắn gọn của khoản (vd Cắt tóc), KHÔNG dùng Khác"}]}  (45k/45 nghìn=45000, 2 triệu=2000000, 1tr2=1200000; "cho Nam vay"=chovay; "vay Nam"=divay; nhận lương/được cho=thu)
 {"type":"reminder","title":"...","at":"YYYY-MM-DDTHH:mm","repeat":"Không|Hằng ngày|Hằng tuần|Hằng tháng|Hằng năm"}
 {"type":"habit","name":"tên thói quen có sẵn khớp nhất","amount":số (số lượng làm thêm; nếu nói đã đủ/xong thì dùng đúng mục tiêu)}
-{"type":"stats","period":"day|week|month|year"}  (hỏi chi tiêu)
+{"type":"stats","period":"day|week|month|year","offset":0}  (hỏi chi tiêu/thu nhập)
 {"type":"sub","name":"...","amt":số,"cycle":"m|y","cat":"Giải trí|Tiện ích|Phần mềm|Hóa đơn|Khác","kind":"sub|bill|other"}
 {"type":"person","name":"tên/vai trò người","section":"một muc_thong_tin hoặc 'birthday'","label":"tên trường (vd Size nhẫn)","value":"giá trị; ngày dạng YYYY-MM-DD"}
 {"type":"bday_query","period":"week|month|year"}
 {"type":"note","text":"nội dung ghi chú/nhật ký"}
 {"type":"habit_new","name":"tên thói quen","icon":"1 emoji","kind":"count|check","target":số mỗi ngày (check thì 1),"unit":"ly|trang|phút|... (check thì rỗng)"}  (tạo thói quen MỚI)
 {"type":"person_new","name":"tên","rel":"quan hệ (Mẹ, Em gái, Đồng nghiệp…)","ptype":"Gia đình|Yêu thương|Bạn bè|Công việc|Khác","birthday":"YYYY-MM-DD hoặc rỗng","close":true/false}  (thêm người MỚI)
+{"type":"events_query","period":"day|week|month","offset":0 hoặc 1 (sau/tới) hoặc -1}  (hỏi lịch/sự kiện/có gì)
+{"type":"balance"} (hỏi còn bao nhiêu tiền)
+{"type":"habit_query"} {"type":"subs_query"} {"type":"notes_query"} {"type":"undo_last"} (hủy lệnh vừa rồi)
+{"type":"person_query","name":"...","q":"câu hỏi"} (hỏi thông tin người thân)
 {"type":"answer","text":"trả lời ngắn khi không phải các loại trên"}
-Một câu có thể có nhiều action.${CMD_MODE?'\nNGỮ CẢNH: người dùng đang bấm nút thêm '+{habit:'THÓI QUEN MỚI → ưu tiên habit_new',person:'NGƯỜI THÂN MỚI → ưu tiên person_new',cal:'LỊCH HẸN/NHẮC NHỞ → ưu tiên reminder'}[CMD_MODE]:''}`;
+Câu HỎI thì dùng loại *_query/stats/balance/answer, KHÔNG tạo note. Lịch hẹn/việc có thời gian thì dùng reminder. Một câu có thể có nhiều action.${CMD_MODE?'\nNGỮ CẢNH: người dùng đang bấm nút thêm '+{habit:'THÓI QUEN MỚI → ưu tiên habit_new',person:'NGƯỜI THÂN MỚI → ưu tiên person_new',cal:'LỊCH HẸN/NHẮC NHỞ → ưu tiên reminder'}[CMD_MODE]:''}`;
  const r=await SAMPLE.json(prompt,{modelTier:'quick'});return r&&r.actions}
-function localParse(t){const L=t.toLowerCase(),acts=[];
- if(CMD_MODE==='habit'){const n=t.match(/(\d+)\s*([^\d\s,.]+)?/);const name=cap(t.replace(/mỗi ngày|hằng ngày|hàng ngày|thêm thói quen/gi,'').trim());return[{type:'habit_new',name,icon:'⭐',kind:n&&!/giờ|h\b/.test(n[2]||'')?'count':'check',target:n?+n[1]:1,unit:n?n[2]||'':''}]}
+const WB=w=>new RegExp('(^|[\\s,.!?:;])('+w+')(?=$|[\\s,.!?:;])','i');
+const isQ=L=>/\?\s*$/.test(L)||WB('gì|nào|bao nhiêu|mấy|ai|khi nào|thế nào|ra sao|đâu|chưa|không').test(L.slice(-12))||WB('gì|nào|bao nhiêu|mấy|ai|khi nào|thế nào|ra sao').test(L);
+function periodOf(L,def){if(/hôm nay|ngày hôm nay|bữa nay/.test(L))return{p:'day',o:0};if(/ngày mai|(^|\s)mai(\s|$|\?)/.test(L))return{p:'day',o:1};if(/hôm qua/.test(L))return{p:'day',o:-1};
+ if(/tuần (sau|tới)/.test(L))return{p:'week',o:1};if(/tuần trước/.test(L))return{p:'week',o:-1};if(/tuần/.test(L))return{p:'week',o:0};
+ if(/tháng (sau|tới)/.test(L))return{p:'month',o:1};if(/tháng trước/.test(L))return{p:'month',o:-1};if(/tháng/.test(L))return{p:'month',o:0};if(/năm/.test(L))return{p:'year',o:0};return def}
+const hasTime=L=>/\d{1,2}\s*(giờ|h|g)\s*\d{0,2}|\d{1,2}:\d{2}|sáng|chiều|tối|trưa|ngày mai|(^|\s)mai(\s|$)|ngày kia|(^|\s)mốt(\s|$)|thứ (hai|ba|tư|năm|sáu|bảy|\d)|chủ nhật|\d{1,2}\/\d{1,2}|ngày \d{1,2}|tuần sau|\d+\s*(phút|tiếng) nữa/.test(L);
+const MONEY_RX=/\d\s*(k|nghìn|nghin|ngàn|ngan|triệu|trieu|tr|củ|trăm|đồng|đ|vnd)(?![a-zà-ỹ])/i;
+function findPersonIn(L){let best=null;S.people.forEach(p=>[p.name,p.rel].filter(Boolean).forEach(n=>{n=n.toLowerCase();if(n.length>=2&&WB(n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(L)&&(!best||n.length>best.n.length))best={p,n}}));return best&&best.p}
+function cleanTitle(t){let s=t.replace(/^(hãy\s+)?(đặt\s+)?(lời\s+)?(nhắc nhở|nhắc|lịch hẹn|đặt lịch|lịch|hẹn)\s*(tôi|mình|em|anh|giúp tôi|giùm)?\s*(là|về|:)?\s*/i,'')
+ .replace(/\s*(vào\s+)?(lúc|vào)?\s*\d{1,2}\s*(giờ|h|g|:)\s*(\d{1,2}|rưỡi|kém \d+)?(\s*phút)?/gi,' ')
+ .replace(/\s*(vào\s+)?(ngày\s+)?\d{1,2}\/\d{1,2}(\/\d{2,4})?/g,' ').replace(/\s*\d+\s*(phút|tiếng) nữa/gi,' ')
+ .replace(/(^|\s)(vào\s+)?(sáng|chiều|tối|trưa|ngày mai|mai|ngày kia|mốt|hôm nay|tuần sau|chủ nhật|thứ (hai|ba|tư|năm|sáu|bảy|\d)|hằng ngày|mỗi ngày|hằng tuần|mỗi tuần|hằng tháng|mỗi tháng|hằng năm|mỗi năm|nay)(?=\s|$|,)/gi,' ')
+ .replace(/\s+(lúc|vào|nhé|nha|nhá)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').replace(/^[\s,.:-]+|[\s,.:-]+$/g,'');return cap(s)||cap(t)}
+const repeatOf=L=>/hằng ngày|mỗi ngày|hàng ngày/.test(L)?'Hằng ngày':/hằng tuần|mỗi tuần|hàng tuần/.test(L)?'Hằng tuần':/hằng tháng|mỗi tháng|hàng tháng/.test(L)?'Hằng tháng':/hằng năm|mỗi năm|hàng năm/.test(L)?'Hằng năm':'Không';
+function moneyDate(L){if(/hôm kia/.test(L))return addD(today(),-2);if(/hôm qua/.test(L))return addD(today(),-1);const d=parseDate(L);if(d)return d;const m=L.match(/(?:ngày\s*)?(\d{1,2})\/(\d{1,2})(?!\/)/);if(m)return new Date().getFullYear()+'-'+pad(m[2])+'-'+pad(m[1]);return today()}
+function localParse(t){t=String(t).normalize('NFC').trim();let L=t.toLowerCase();let m;
+ if(CMD_MODE==='habit'){const n=t.match(/(\d+)\s*([^\d\s,.]+)?/);const name=cap(t.replace(/mỗi ngày|hằng ngày|hàng ngày|thêm thói quen/gi,'').trim());return[{type:'habit_new',name,icon:'⭐',kind:n&&!/giờ|h$/.test(n[2]||'')?'count':'check',target:n?+n[1]:1,unit:n?n[2]||'':''}]}
  if(CMD_MODE==='person'){const bd=parseDate(t);const parts=t.replace(/^thêm\s*/i,'').split(/,|sinh/i).map(x=>x.trim()).filter(Boolean);return[{type:'person_new',name:cap(parts[0]||t),rel:cap(parts[1]&&!/\d/.test(parts[1])?parts[1]:''),ptype:/mẹ|bố|ba|anh|chị|em|con|vợ|chồng|ông|bà|cô|chú|dì|cậu/i.test(t)?'Gia đình':/đồng nghiệp|sếp|khách/i.test(t)?'Công việc':'Bạn bè',birthday:bd,close:false}]}
- if(CMD_MODE==='cal'&&!/^nhắc/i.test(t))t='nhắc '+t;
- let m;const L2=t.toLowerCase();
- if(m=t.match(/^(?:ghi chú|ghi nhật ký|nhật ký|note)\s*:?\s*(.+)/i))return[{type:'note',text:m[1]}];
- if(/^nhắc|nhắc (tôi|mình|em|anh)/.test(L2)){const title=t.replace(/^.*?nhắc\s*(tôi|mình|em|anh)?\s*/i,'').replace(/(lúc|vào)?\s*\d{1,2}\s*(giờ|h|:)\s*\d{0,2}.*$/i,'').replace(/\b(ngày mai|mai|tối|sáng|chiều|chủ nhật|thứ \S+)\b/gi,'').trim()||t;
-  return[{type:'reminder',title:title[0].toUpperCase()+title.slice(1),at:parseWhen(t),repeat:/hằng ngày|mỗi ngày/.test(L)?'Hằng ngày':/hằng tuần|mỗi tuần/.test(L)?'Hằng tuần':/hằng năm|mỗi năm/.test(L)?'Hằng năm':'Không'}]}
- if(/chi nhiều nhất|chi bao nhiêu|tiêu bao nhiêu|chi tiêu/.test(L)&&/\?|bao nhiêu|đâu|nào/.test(L))return[{type:'stats',period:/tuần/.test(L)?'week':/hôm nay|ngày/.test(L)?'day':/năm/.test(L)?'year':'month'}];
- if(/sinh nhật/.test(L)&&/\?|không|ai/.test(L)&&!/sửa|đổi/.test(L))return[{type:'bday_query',period:/tuần/.test(L)?'week':/năm/.test(L)?'year':'month'}];
- if(m=t.match(/(?:sửa|đổi|cập nhật)\s+ngày sinh (?:của\s+)?(.+?)\s+(?:thành|là)\s+(.+)/i))return[{type:'person',name:m[1],section:'birthday',value:parseDate(m[2])}];
- if(/mỗi tháng|hàng tháng|hằng tháng|mỗi năm|hằng năm/.test(L)&&/thêm|gói|đăng ký/.test(L)){const name=t.replace(/thêm|gói|đăng ký/gi,'').replace(/\d.*$/,'').trim();return[{type:'sub',name:name||'Gói mới',amt:parseMoney(t),cycle:/năm/.test(L)?'y':'m',cat:guessCat(t)==='Giải trí'?'Giải trí':'Tiện ích',kind:'sub'}]}
- const h=findHabit(L);if(h&&/(rồi|xong|đủ|đã|thêm|\+)/.test(L)){const n=(L.match(/(\d+)/)||[])[1];return[{type:'habit',name:h.name,amount:/đủ|xong/.test(L)||!n?h.target:+n}]}
- const items=[];const parts=t.split(/[,;\n]| và /i).map(s=>s.trim()).filter(Boolean);
+ if(/^(hoàn tác|hủy|huỷ|xóa|xoá|bỏ)(\s+(lệnh|khoản|cái|mục|thao tác))?(\s+(chi\s+)?(vừa rồi|vừa nãy|vừa xong|cuối|trước|vừa nhập|vừa ghi))?\s*$/.test(L)||/^(hoàn tác|hủy lệnh|huỷ lệnh)/.test(L))return[{type:'undo_last'}];
+ if(m=t.match(/^(?:ghi chú|ghi nhật ký|nhật ký|note|ghi lại|lưu ý)\s*:?\s*(.+)/i))return[{type:'note',text:cap(m[1])}];
+ if(m=t.match(/^thêm thói quen\s*:?\s*(.+)/i)){CMD_MODE='habit';const r=localParse(m[1]);CMD_MODE=null;return r}
+ if(m=t.match(/^thêm (người thân|người|liên hệ)\s*:?\s*(.+)/i)){CMD_MODE='person';const r=localParse(m[2]);CMD_MODE=null;return r}
+ if(CMD_MODE==='cal'&&!/nhắc|hẹn|lịch/.test(L)){t='nhắc '+t;L=t.toLowerCase()}
+ // ---- questions
+ if(isQ(L)&&!/^(nhắc (tôi|mình|em|anh|giúp)|đặt|thêm|sửa|đổi|cập nhật|ghi chú)/.test(L)){
+  const per=periodOf(L,null);
+  if(/sinh nhật/.test(L))return[{type:'bday_query',period:per?per.p:'month',offset:per?per.o:0}];
+  if(/còn bao nhiêu tiền|số dư|tổng tiền|còn lại bao nhiêu|có bao nhiêu tiền/.test(L))return[{type:'balance'}];
+  if(/(chi|tiêu|xài|tốn|mua|thu nhập|thu bao nhiêu|kiếm)/.test(L)&&!/gói|đăng ký/.test(L))return[{type:'stats',period:(per||{p:'month'}).p,offset:(per||{o:0}).o}];
+  if(/gói|đăng ký|định kỳ|gia hạn|netflix|spotify|youtube/.test(L))return[{type:'subs_query'}];
+  if(/thói quen|chưa làm|đã làm|hoàn thành|chuỗi/.test(L))return[{type:'habit_query'}];
+  if(/ghi chú|nhật ký/.test(L))return[{type:'notes_query'}];
+  const p=findPersonIn(L);if(p&&!/sự kiện|lịch|hẹn/.test(L))return[{type:'person_query',name:p.name,q:L}];
+  if(/sự kiện|lịch|hẹn|nhắc|việc gì|có gì|kế hoạch|bận|rảnh|làm gì/.test(L)||per)return[{type:'events_query',period:(per||{p:'week'}).p,offset:(per||{o:0}).o}];
+  return[{type:'answer',text:'Javis chưa hiểu câu hỏi này. Bạn có thể hỏi: “tuần này có sự kiện gì”, “tháng này chi bao nhiêu”, “còn bao nhiêu tiền”, “thói quen hôm nay thế nào”, “tháng này ai sinh nhật”, “size nhẫn của vợ là bao nhiêu”.'}]}
+ // ---- person info
+ if(/ngày sinh|sinh nhật/.test(L)&&(parseDate(L)||/\d/.test(L))){const d=parseDate(L);
+  m=t.match(/(?:ngày sinh|sinh nhật)\s+(?:của\s+)?(.+?)\s+(?:thành|là|ngày|vào|:)\s*(.+)$/i)||t.match(/(?:ngày sinh|sinh nhật)\s+(?:của\s+)?(.+?)\s+(\d.+)$/i);
+  const p=findPersonIn(L);const name=p?p.name:(m?m[1].trim():'');if(name&&d)return[{type:'person',name,section:'birthday',value:d}]}
+ if(m=t.match(/^(?:thêm\s+|ghi\s+|lưu\s+)?(size|cỡ|số đo|số giày|số áo|số quần|vòng|chiều cao|cân nặng)\s*(.*?)\s+của\s+(.+?)\s*(?:là|:|=)\s*(.+)$/i))return[{type:'person',name:m[3],section:'Số đo & size',label:cap((m[1]+' '+m[2]).trim()),value:m[4]}];
+ {const p=findPersonIn(L);if(p){const n=p.name.toLowerCase(),r=(p.rel||'').toLowerCase();
+  if(m=t.match(/\s(thích|mê|ghiền)\s+(.+)$/i))return[{type:'person',name:p.name,section:'Món thích',label:'Thích',value:m[2]}];
+  if(m=t.match(/\s(dị ứng|bị dị ứng)\s+(.+)$/i))return[{type:'person',name:p.name,section:'Sức khỏe',label:'Dị ứng',value:m[2]}];
+  if(m=t.match(/\s(không ăn|ăn chay|kiêng)\s*(.*)$/i))return[{type:'person',name:p.name,section:'Ăn uống',label:cap(m[1]),value:m[2]||cap(m[1])}];
+  if(/đã gọi|vừa gọi|đã gặp|vừa gặp|đã nhắn|liên lạc/.test(L)&&!MONEY_RX.test(L)&&!findHabit(L))return[{type:'contacted',name:p.name}]}}
+ // ---- reminders / appointments
+ if(/nhắc/.test(L)||(/(đặt lịch|lịch hẹn|hẹn|cuộc hẹn|họp|gặp|đi khám|khám|deadline|nộp|đón|đưa|thanh toán|đóng tiền|sự kiện|đám cưới|sinh nhật)/.test(L)&&hasTime(L)&&!MONEY_RX.test(L))){
+  let at=parseWhen(L);if(m=L.match(/(\d+)\s*(phút|tiếng)\s*nữa/)){const d=new Date(Date.now()+(+m[1])*(m[2]==='phút'?6e4:36e5));at=ymd(d)+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
+  return[{type:'reminder',title:cleanTitle(t),at,repeat:repeatOf(L),ask:true}]}
+ // ---- subscriptions
+ if(/(mỗi|hàng|hằng)\s+(tháng|năm)/.test(L)&&parseMoney(L)&&!/nhắc/.test(L)){const name=cap(t.replace(/^(thêm|đăng ký|gói)\s*/i,'').replace(/(gói|đăng ký)\s*/i,'').replace(/\s*\d.*$/,'').trim())||'Gói mới';const bill=/điện|nước|internet|wifi|nhà|điện thoại|rác|gửi xe|học phí/.test(L);
+  return[{type:'sub',name,amt:parseMoney(L),cycle:/năm/.test(L)?'y':'m',cat:bill?'Hóa đơn':/netflix|spotify|youtube|phim|nhạc|game/.test(L)?'Giải trí':/icloud|google|chatgpt|claude|canva|office|phần mềm|app/.test(L)?'Phần mềm':'Tiện ích',kind:bill?'bill':'sub'}]}
+ // ---- habits
+ const h=findHabit(L);
+ if(h&&!MONEY_RX.test(L)&&(/(rồi|xong|đủ|đã|thêm|được|\+)/.test(L)||(h.unit&&new RegExp('\\d+\\s*'+h.unit).test(L)))){const n=(L.match(/(\d+)/)||[])[1];const full=/đủ|xong|hoàn thành/.test(L)||!n||(+n===h.target&&!/thêm|\+/.test(L));return[{type:'habit',name:h.name,amount:full?h.target:+n,set:full}]}
+ // ---- money
+ const items=[];const date=moneyDate(L);const parts=t.split(/,(?!\d)|;|\n|\s+và\s+|\s+với lại\s+/i).map(s=>s.trim()).filter(Boolean);
  parts.forEach(p=>{const amt=parseMoney(p);if(!amt||!/\d/.test(p))return;const l=p.toLowerCase();
-  const kind=/cho .+ vay/.test(l)?'chovay':/^vay|đi vay|mượn/.test(l)?'divay':/nhận|lương|thưởng|được cho|thu /.test(l)?'thu':'chi';
-  const note=p.replace(/(\d+(?:[.,]\d+)?)\s*(triệu|trieu|tr|củ|nghìn|nghin|ngàn|k|đ|vnd)?(\s*\d+)?/i,'').trim()||'Khoản chi';items.push({kind,amt,note:note[0].toUpperCase()+note.slice(1),cat:kind==='chi'?catOf('',note):kind==='thu'?'Thu nhập':'Vay mượn'})});
+  const kind=/cho .+ vay|cho vay/.test(l)?'chovay':/^(đi\s+)?vay|mượn|nợ/.test(l)?'divay':/nhận|lương|thưởng|được cho|hoa hồng|thu nhập|lãi|bán được|thu /.test(l)?'thu':'chi';
+  let note=p.replace(/(\d+(?:[.,]\d+)*)\s*(triệu|trieu|tr|củ|nghìn|nghin|ngàn|ngan|trăm|k|đồng|đ|vnd)?(\s*\d+)?/i,' ').replace(/(^|\s)(hôm qua|hôm kia|hôm nay|ngày \d{1,2}\/\d{1,2}(\/\d{2,4})?|\d{1,2}\/\d{1,2}(\/\d{2,4})?|hết|mất|tốn)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim()||(kind==='thu'?'Thu nhập':'Khoản chi');
+  items.push({kind,amt,note:cap(note),cat:kind==='chi'?catOf('',note):kind==='thu'?'Thu nhập':'Vay mượn',date})});
  if(items.length)return[{type:'money',items}];
- return[{type:'note',text:t,guess:true}]}
+ if(h)return[{type:'habit',name:h.name,amount:h.target,set:true}];
+ return[{type:'note',text:cap(t),guess:true}]}
 function execute(acts){acts.forEach(a=>{try{const h=ACT[a.type];if(h)CHAT.push(h(a))}catch(e){CHAT.push({html:()=>'Không hiểu được yêu cầu này.'})}});save();render()}
-function undoRow(label,undo,icon='✓'){const id=uid();UNDO[id]={undo,done:false};return`<div class="ac" id="ac${id}"><span class="pos">${icon}</span><span class="sp">${label}</span><button class="u" onclick="doUndo('${id}')">HOÀN TÁC</button></div>`}
+const UNDO_ORDER=[];
+function undoRow(label,undo,icon='✓'){const id=uid();UNDO[id]={undo,done:false,label};UNDO_ORDER.push(id);return`<div class="ac" id="ac${id}"><span class="pos">${icon}</span><span class="sp">${label}</span><button class="u" onclick="doUndo('${id}')">HOÀN TÁC</button></div>`}
 const UNDO={};
 function doUndo(id){const u=UNDO[id];if(!u||u.done)return;u.undo();u.done=true;save();render();const el=$('#ac'+id);if(el){el.classList.add('undone');el.querySelector('.u').textContent='ĐÃ HỦY'}}
 const ACT={
- money(a){const rows=(a.items||[]).filter(i=>i.amt>0).map(i=>{const ty=i.kind||'chi',t={id:uid(),type:ty,amt:+i.amt,cat:ty==='chi'?catOf(i.cat,i.note):(i.cat||'Thu nhập'),note:cap(i.note),date:today(),time:nowT(),tags:mkTags(i.note),created:Date.now()};S.tx.push(t);
+ money(a){const rows=(a.items||[]).filter(i=>i.amt>0).map(i=>{const ty=i.kind||'chi',t={id:uid(),type:ty,amt:+i.amt,cat:ty==='chi'?catOf(i.cat,i.note):(i.cat||'Thu nhập'),note:cap(i.note),date:i.date||today(),time:nowT(),tags:mkTags(i.note),created:Date.now()};S.tx.push(t);
    const sign=t.type==='thu'||t.type==='divay'?'+':'−';const lbl={chi:'',thu:'Thu · ',chovay:'Cho vay · ',divay:'Đi vay · '}[t.type];
    return undoRow(`💰 <b class="${sign=='+'?'pos':'neg'}">${sign}${Math.round(t.amt).toLocaleString('vi-VN')}</b> · ${lbl}${esc(t.note)}`,()=>{S.tx=S.tx.filter(x=>x.id!==t.id)})}).join('');
   return{html:()=>rows||'Không thấy số tiền.'}},
  reminder(a){const r={id:uid(),title:a.title||'Nhắc nhở',at:a.at||parseWhen(''),repeat:a.repeat||'Không'};const id=uid();PEND[id]={r};
-  return{html:()=>PEND[id].saved?undoRowCached(id):`<div><b>🔔 Nhắc nhở</b></div><div class="cbox"><input id="rt${id}" value="${esc(r.title)}" style="border:0;background:none;width:100%;font-size:15px"></div>
+  return{html:()=>PEND[id].saved?undoRowCached(id):`<div><b>🔔 Lịch hẹn / nhắc nhở</b></div><div class="cbox"><input id="rt${id}" value="${esc(r.title)}" style="border:0;background:none;width:100%;font-size:15px"></div>
    <div class="cbox row"><span class="sp">Thời gian</span><input id="ra${id}" type="datetime-local" value="${r.at}" style="border:0;background:none;color:var(--blue);font-weight:600"></div>
    <div class="cbox row"><span class="sp">Lặp lại</span><select id="rr${id}" style="border:0;background:none;color:var(--blue)">${['Không','Hằng ngày','Hằng tuần','Hằng tháng','Hằng năm'].map(o=>`<option ${o==r.repeat?'selected':''}>${o}</option>`).join('')}</select></div>
-   <div class="row mt"><button class="btn ghost" onclick="PEND['${id}'].saved='x';renderLog()">Bỏ</button><button class="btn" style="flex:1" onclick="savePend('${id}')">Xác nhận & lưu</button></div>`}},
+   <div class="row mt"><button class="btn ghost" onclick="PEND['${id}'].saved='x';renderLog()">Bỏ</button><button class="btn ghost" onclick="savePend('${id}','note')">📝 Vào ghi chú</button><button class="btn" style="flex:1" onclick="savePend('${id}')">🔔 Lưu nhắc nhở</button></div><div class="small mt">Lưu thành nhắc nhở (hiện trên Lịch) hay chỉ ghi vào ghi chú?</div>`}},
  note(a){const id=uid();PEND[id]={note:a.text};
   return{html:()=>PEND[id].saved?undoRowCached(id):`<div><b>📝 Ghi vào ghi chú?</b></div><div class="cbox"><textarea id="nt${id}" style="border:0;background:none;width:100%;min-height:60px;font-size:15px">${esc(a.text)}</textarea></div>
-   <div class="small">Ghi chú ngày ${dmy(today())}</div><div class="row mt"><button class="btn ghost" onclick="PEND['${id}'].saved='x';renderLog()">Bỏ</button><button class="btn" style="flex:1" onclick="savePend('${id}')">Ghi vào ghi chú</button></div>`}},
+   <div class="small">Ghi chú ngày ${dmy(today())}</div><div class="row mt"><button class="btn ghost" onclick="PEND['${id}'].saved='x';renderLog()">Bỏ</button><button class="btn ghost" onclick="savePend('${id}','rem')">🔔 Thành nhắc nhở</button><button class="btn" style="flex:1" onclick="savePend('${id}')">📝 Ghi vào ghi chú</button></div>`}},
  habit(a){const h=findHabit(a.name);if(!h)return{html:()=>`Chưa có thói quen “${esc(a.name)}”. Vào tab Thói quen để thêm.`};
-  const d=today(),old=h.log[d]||0;h.log[d]=Math.min(h.kind==='check'?1:9999,old+(+a.amount||h.target));if(h.kind==='check')h.log[d]=1;const st=streak(h);
+  const d=today(),old=h.log[d]||0;h.log[d]=a.set?Math.max(old,h.target):Math.min(9999,old+(+a.amount||h.target));if(h.kind==='check')h.log[d]=1;const st=streak(h);
   const row=undoRow(`🌱 ${esc(h.name)} · ${h.log[d]}/${h.target} ${esc(h.unit)}`,()=>{h.log[d]=old});
   return{html:()=>(hDone(h,d)?`Chuỗi <b>${st} ngày</b> liên tiếp, giữ tiếp nhé.`:`Đã cập nhật, còn ${h.target-h.log[d]} ${esc(h.unit)} nữa.`)+row}},
- stats(a){const p=period(a.period||'month',0),s=sumTx(p.a,p.b);const top=Object.entries(s.cat).sort((x,y)=>y[1]-x[1]);const nm={day:'Hôm nay',week:'Tuần này',month:'Tháng này',year:'Năm nay'}[a.period||'month'];
-  return{html:()=>s.chi?`${nm} bạn chi <b>${money(s.chi)}</b>, nhiều nhất là <b>${esc(top[0][0])}: ${money(top[0][1])} (${Math.round(top[0][1]/s.chi*100)}%)</b>.<div class="mt">${top.slice(0,5).map(([c,v])=>`<div class="row small"><span class="sp">${esc(c)}</span>${money(v)}</div>`).join('')}</div>`:`${nm} chưa có khoản chi nào.`}},
+ stats(a){const p=period(a.period||'month',a.offset||0),s=sumTx(p.a,p.b);const top=Object.entries(s.cat).sort((x,y)=>y[1]-x[1]);const nm=a.offset===-1?{day:'Hôm qua',week:'Tuần trước',month:'Tháng trước',year:'Năm ngoái'}[a.period||'month']:{day:'Hôm nay',week:'Tuần này',month:'Tháng này',year:'Năm nay'}[a.period||'month'];
+  return{html:()=>s.chi?`${nm} bạn chi <b>${money(s.chi)}</b>${s.thu?', thu '+money(s.thu):''}, nhiều nhất là <b>${esc(top[0][0])}: ${money(top[0][1])} (${Math.round(top[0][1]/s.chi*100)}%)</b>.<div class="mt">${top.slice(0,5).map(([c,v])=>`<div class="row small"><span class="sp">${esc(c)}</span>${money(v)}</div>`).join('')}</div>`:`${nm} chưa có khoản chi nào.`}},
  sub(a){const s={id:uid(),name:a.name||'Gói mới',amt:+a.amt||0,cycle:a.cycle||'m',cat:a.cat||'Tiện ích',kind:a.kind||'sub',plan:'',next:addD(today(),a.cycle==='y'?365:30)};S.subs.push(s);
   const r=undoRow(`🔁 ${esc(s.name)} · ${money(s.amt)}/${s.cycle==='y'?'năm':'tháng'}`,()=>{S.subs=S.subs.filter(x=>x.id!==s.id)});return{html:()=>r}},
  person(a){let p=findPerson(a.name),created=false;if(!p){p={id:uid(),name:a.name||'Người mới',rel:'',type:'Khác',close:false,birthday:'',remind:true,dates:[],fields:[],groups:[],last:''};S.people.push(p);created=true}
@@ -352,18 +404,37 @@ const ACT={
    r=undoRow(`👤 ${esc(p.name)} · ${esc(a.label)}: ${esc(a.value)}`,()=>{if(created)S.people=S.people.filter(y=>y!==p);else if(ex)ex.value=old;else p.fields=p.fields.filter(f=>f.label!==a.label)})}
   return{html:()=>r}},
  bday_query(a){const n=a.period==='week'?7:a.period==='year'?366:0;const now=new Date();
-  const L=S.people.filter(p=>p.birthday).map(p=>({p,d:nextOcc(p.birthday)})).filter(x=>n?daysTo(x.d)<n:pd(x.d).getMonth()===now.getMonth()&&pd(x.d).getFullYear()===now.getFullYear()).sort((a,b)=>a.d.localeCompare(b.d));
+  const pp=period(a.period==='year'?'year':a.period==='week'?'week':a.period==='day'?'day':'month',a.offset||0);const L=S.people.filter(p=>p.birthday).map(p=>({p,d:nextOcc(p.birthday,pp.a)})).filter(x=>x.d>=pp.a&&x.d<=pp.b).sort((a,b)=>a.d.localeCompare(b.d));
   return{html:()=>L.length?L.map(x=>`<div>• <b>${esc(x.p.name)}</b> · ${x.d.slice(8)}/${x.d.slice(5,7)}, ${daysTo(x.d)?'còn '+daysTo(x.d)+' ngày':'hôm nay 🎂'}</div>`).join(''):'Không có ai sinh nhật trong khoảng này.'}},
  habit_new(a){const h={id:uid(),name:cap(a.name)||'Thói quen mới',icon:a.icon||'⭐',kind:a.kind==='check'?'check':'count',target:a.kind==='check'?1:Math.max(1,+a.target||1),unit:a.kind==='check'?'':(a.unit||''),log:{}};S.habits.push(h);
   const r=undoRow(`${h.icon} Thói quen mới: <b>${esc(h.name)}</b> · ${h.kind==='count'?'Đếm '+h.target+' '+esc(h.unit):'Đánh dấu'}`,()=>{S.habits=S.habits.filter(x=>x.id!==h.id)});return{html:()=>r+`<button class="tag" onclick="closeSheet();fHabit(S.habits.find(x=>x.id==='${h.id}'))">✎ Sửa chi tiết</button>`}},
  person_new(a){const p={id:uid(),name:cap(a.name)||'Người mới',rel:cap(a.rel),type:PTYPES.includes(a.ptype)?a.ptype:'Khác',close:!!a.close,birthday:parseDate(a.birthday)||'',remind:true,dates:[],fields:[],groups:[],last:''};S.people.push(p);
   const r=undoRow(`👤 Thêm <b>${esc(p.name)}</b>${p.rel?' · '+esc(p.rel):''}${p.birthday?' · sinh '+dmy(p.birthday):''}`,()=>{S.people=S.people.filter(x=>x.id!==p.id)});return{html:()=>r+`<button class="tag" onclick="closeSheet();fPerson(S.people.find(x=>x.id==='${p.id}'))">✎ Sửa chi tiết</button>`}},
+ undo_last(){const id=[...UNDO_ORDER].reverse().find(k=>!UNDO[k].done);if(!id)return{html:()=>'Không có thao tác nào để hoàn tác.'};const lb=UNDO[id].label;doUndo(id);return{html:()=>'↺ Đã hoàn tác: '+lb}},
+ balance(){const m=period('month',0),s=sumTx(m.a,m.b);return{html:()=>`Tổng tiền hiện có: <b>${money(balance())}</b><div class="small mt">Tháng này: thu ${money(s.thu)} · chi ${money(s.chi)}</div>`}},
+ subs_query(){const tot=S.subs.reduce((a,x)=>a+subMonthly(x),0);const up=S.subs.slice().sort((a,b)=>subNext(a).localeCompare(subNext(b))).slice(0,4);
+  return{html:()=>S.subs.length?`Các khoản định kỳ: <b>${money(tot)}/tháng</b>${up.map(x=>`<div class="small mt">• ${esc(x.name)} · ${money(x.amt)} · gia hạn ${dmy(subNext(x)).slice(0,5)} (còn ${daysTo(subNext(x))} ngày)</div>`).join('')}`:'Chưa có gói đăng ký nào.'}},
+ habit_query(){const d=today(),done=S.habits.filter(h=>hDone(h,d)),left=S.habits.filter(h=>!hDone(h,d));
+  return{html:()=>`Hôm nay xong <b>${done.length}/${S.habits.length}</b> thói quen.${left.length?'<div class="mt">Còn lại:</div>'+left.map(h=>`<div class="small">• ${h.icon} ${esc(h.name)} (${hVal(h,d)}/${h.target} ${esc(h.unit)})</div>`).join(''):' Tuyệt vời, đã hoàn thành hết! 🎉'}`}},
+ notes_query(){return{html:()=>S.notes.length?'Ghi chú gần đây:'+S.notes.slice(0,5).map(n=>`<div class="small mt">• ${esc(n.text)} <span style="color:#999">(${dmy(ymd(new Date(n.at))).slice(0,5)})</span></div>`).join(''):'Chưa có ghi chú nào.'}},
+ person_query(a){const p=findPerson(a.name);if(!p)return{html:()=>'Không tìm thấy người này.'};const q=a.q||'';
+  let F=(p.fields||[]);const hit=F.filter(f=>q.includes(f.label.toLowerCase())||f.label.toLowerCase().split(/\s+/).some(w=>w.length>2&&q.includes(w)));if(hit.length)F=hit;
+  const lines=(p.birthday?[`🎂 Sinh nhật: ${dmy(p.birthday)} (còn ${daysTo(nextOcc(p.birthday))} ngày)`]:[]).concat(F.map(f=>`${esc(f.label)}: <b>${esc(f.value)}</b>`));
+  return{html:()=>`<b>${esc(p.name)}</b>${lines.length?lines.map(x=>`<div class="small mt">• ${x}</div>`).join(''):'<div class="small mt">Chưa có thông tin. Nói ví dụ “size nhẫn của '+esc(p.name)+' là 12”.</div>'}`}},
+ contacted(a){const p=findPerson(a.name);if(!p)return{html:()=>'Không tìm thấy người này.'};const o=p.last;p.last=today();return{html:()=>undoRow(`📞 Đã ghi nhận liên lạc với ${esc(p.name)} hôm nay`,()=>{p.last=o})}},
+ events_query(a){const pp=period(a.period||'week',a.offset||0);const out=[];for(let d=pp.a;d<=pp.b;d=addD(d,1)){const ev=eventsOn(d);if(ev.length)out.push({d,ev})}
+  const nm={day:a.offset===1?'Ngày mai':a.offset===-1?'Hôm qua':'Hôm nay',week:a.offset===1?'Tuần sau':'Tuần này',month:a.offset===1?'Tháng sau':'Tháng này',year:'Năm nay'}[a.period||'week'];
+  return{html:()=>out.length?`<b>${nm}</b> có ${out.reduce((x,y)=>x+y.ev.length,0)} sự kiện:`+out.map(o=>`<div class="mt"><b class="small" style="color:#333">${DOW[pd(o.d).getDay()]} ${dmy(o.d).slice(0,5)}</b>${o.ev.map(e=>`<div class="small">• ${e.time==='Cả ngày'?'':e.time+' · '}${esc(e.t)}</div>`).join('')}</div>`).join(''):`${nm} chưa có sự kiện, nhắc nhở hay sinh nhật nào.`}},
  answer(a){return{html:()=>esc(a.text)}}};
 const PEND={};
 function undoRowCached(id){const P=PEND[id];if(P.saved==='x')return'<span class="sub">Đã bỏ qua.</span>';return P.row}
-function savePend(id){const P=PEND[id];if(P.r){const r=P.r;r.title=$('#rt'+id).value;r.at=$('#ra'+id).value;r.repeat=$('#rr'+id).value;S.rem.push(r);
-  P.row=undoRow(`🔔 ${esc(r.title)} · ${dmy(r.at)} ${r.at.slice(11,16)}${r.repeat!=='Không'?' · '+r.repeat:''}`,()=>{S.rem=S.rem.filter(x=>x.id!==r.id)})}
- else{const n={id:uid(),text:$('#nt'+id).value,at:new Date().toISOString()};S.notes.unshift(n);P.row=undoRow('📝 '+esc(n.text.slice(0,60)),()=>{S.notes=S.notes.filter(x=>x.id!==n.id)})}
+function savePend(id,as){const P=PEND[id];
+ if(P.r){const r=P.r;r.title=$('#rt'+id).value;r.at=$('#ra'+id).value;r.repeat=$('#rr'+id).value;
+  if(as==='note'){const n={id:uid(),text:r.title+' – '+dmy(r.at)+' '+r.at.slice(11,16)+(r.repeat!=='Không'?' ('+r.repeat+')':''),at:new Date().toISOString()};S.notes.unshift(n);P.row=undoRow('📝 '+esc(n.text),()=>{S.notes=S.notes.filter(x=>x.id!==n.id)})}
+  else{S.rem.push(r);P.row=undoRow(`🔔 ${esc(r.title)} · ${dmy(r.at)} ${r.at.slice(11,16)}${r.repeat!=='Không'?' · '+r.repeat:''}`,()=>{S.rem=S.rem.filter(x=>x.id!==r.id)})}}
+ else{const text=$('#nt'+id).value;
+  if(as==='rem'){const L=text.toLowerCase();const r={id:uid(),title:cleanTitle(text),at:parseWhen(L),repeat:repeatOf(L)};S.rem.push(r);P.row=undoRow(`🔔 ${esc(r.title)} · ${dmy(r.at)} ${r.at.slice(11,16)}`,()=>{S.rem=S.rem.filter(x=>x.id!==r.id)})}
+  else{const n={id:uid(),text,at:new Date().toISOString()};S.notes.unshift(n);P.row=undoRow('📝 '+esc(n.text.slice(0,60)),()=>{S.notes=S.notes.filter(x=>x.id!==n.id)})}}
  P.saved=true;save();render();renderLog()}
 
 // ===== manual forms =====
@@ -379,7 +450,10 @@ function fRem(r){const e=r||{};openForm(r?'Sửa nhắc nhở':'Nhắc nhở m�
 function fNote(n){const e=n||{};openForm(n?'Sửa ghi chú':'Ghi chú mới',[{k:'text',label:'Nội dung',type:'textarea',value:e.text||''}],v=>{if(!v.text)return false;if(n)n.text=v.text;else{const o={id:uid(),text:v.text,at:new Date().toISOString()};S.notes.unshift(o);toast('Đã ghi',()=>{S.notes=S.notes.filter(x=>x.id!==o.id)})}},n?`<button class="btn ghost" onclick="delIn('notes','${e.id}')">Xóa</button>`:'')}
 function delIn(coll,id){const i=S[coll].findIndex(x=>x.id===id),o=S[coll][i];S[coll].splice(i,1);closeSheet();UI.screen=null;save();render();toast('Đã xóa',()=>S[coll].splice(i,0,o))}
 function fHabit(h){const e=h||{};openForm(h?'Sửa thói quen':'Thói quen mới',[{k:'name',label:'Tên',value:e.name||''},{k:'icon',label:'Biểu tượng (emoji)',value:e.icon||'⭐'},{k:'kind',label:'Kiểu',type:'select',options:['Đếm','Đánh dấu'],value:e.kind==='check'?'Đánh dấu':'Đếm'},{k:'target',label:'Mục tiêu mỗi ngày (với kiểu Đếm)',type:'number',value:e.target||1},{k:'unit',label:'Đơn vị (ly, trang, phút…)',value:e.unit||''}],
- v=>{if(!v.name)return false;const o={name:v.name,icon:v.icon,kind:v.kind==='Đếm'?'count':'check',target:v.kind==='Đếm'?Math.max(1,v.target):1,unit:v.unit};if(h)Object.assign(h,o);else S.habits.push({id:uid(),log:{},...o})},h?`<button class="btn ghost" onclick="delIn('habits','${e.id}')">Xóa</button>`:'')}
+ v=>{if(!v.name)return false;let tg=Math.max(1,v.target||1),nm=v.name;const nn=(nm.match(/\d+/)||[])[0];
+ if(h&&h.kind==='count'&&v.kind==='Đếm'){if(tg===h.target&&nn&&+nn!==h.target)tg=+nn;else if(tg!==h.target&&nn&&+nn===h.target)nm=nm.replace(nn,String(tg))}
+ else if(!h&&v.kind==='Đếm'&&nn&&tg===1)tg=+nn;
+ const o={name:nm,icon:v.icon,kind:v.kind==='Đếm'?'count':'check',target:v.kind==='Đếm'?tg:1,unit:v.unit};if(h)Object.assign(h,o);else S.habits.push({id:uid(),log:{},...o})},h?`<button class="btn ghost" onclick="delIn('habits','${e.id}')">Xóa</button>`:'')}
 function fSub(s){const e=s||{};openForm(s?'Sửa gói':'Thêm gói',[{k:'name',label:'Tên (Netflix, Spotify, tiền điện…)',value:e.name||''},{k:'plan',label:'Gói (Tiêu chuẩn, Cá nhân…)',value:e.plan||''},{k:'amt',label:'Số tiền',type:'money',value:e.amt||''},{k:'cycle',label:'Chu kỳ',type:'select',options:['Hàng tháng','Hàng năm'],value:e.cycle==='y'?'Hàng năm':'Hàng tháng'},{k:'cat',label:'Phân loại',type:'select',options:['Giải trí','Tiện ích','Phần mềm','Hóa đơn','Khác'],value:e.cat||'Giải trí'},{k:'kind',label:'Nhóm',type:'select',options:['Gói đăng ký','Hóa đơn','Khác'],value:{sub:'Gói đăng ký',bill:'Hóa đơn',other:'Khác'}[e.kind]||'Gói đăng ký'},{k:'next',label:'Ngày gia hạn tiếp theo',type:'date',value:e.next||addD(today(),30)}],
  v=>{if(!v.name)return false;const o={...v,cycle:v.cycle==='Hàng năm'?'y':'m',kind:{'Gói đăng ký':'sub','Hóa đơn':'bill','Khác':'other'}[v.kind]};if(s)Object.assign(s,o);else S.subs.push({id:uid(),...o})},s?`<button class="btn ghost" onclick="delIn('subs','${e.id}')">Xóa</button>`:'')}
 function fPerson(p){const e=p||{};openForm(p?'Sửa thông tin':'Thêm người',[{k:'name',label:'Tên',value:e.name||''},{k:'rel',label:'Quan hệ (Mẹ, Vợ, Bạn…)',value:e.rel||''},{k:'type',label:'Loại',type:'select',options:PTYPES,value:e.type||'Gia đình'},{k:'birthday',label:'Sinh nhật',type:'date',value:e.birthday||''},{k:'close',label:'Vòng thân thiết',type:'check',value:e.close},{k:'remind',label:'Nhắc sinh nhật',type:'check',value:e.remind!==false},{k:'groups',label:'Nhóm (cách nhau dấu phẩy)',value:(e.groups||[]).join(', ')}],
