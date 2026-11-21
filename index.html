@@ -116,6 +116,7 @@ h2{font-size:20px;font-weight:700;margin:22px 0 10px}
 <nav id="tabs"></nav>
 <div id="mask" onclick="closeSheet()"></div>
 <div id="sheet"></div>
+<input type="file" id="bkfile" accept=".json,application/json,text/plain" hidden>
 <input type="file" id="rcpt" accept="image/*" capture="environment" hidden>
 <script>
 // ===== helpers =====
@@ -514,7 +515,7 @@ function back(title,right=''){return`<div class="row" style="margin-top:4px"><bu
 const VIEWS={
 home(){const H=S.home,d=today();const todayEv=eventsOn(d);const up=[];for(let i=0;i<7;i++){eventsOn(addD(d,i)).forEach(e=>up.push({...e,d:addD(d,i)}))}
  const done=S.habits.filter(h=>hDone(h,d)).length,m=period('month',0),s=sumTx(m.a,m.b);
- let o=hdr(`<span style="font-size:30px">💧</span> Trang chủ`,`<button class="iconbtn" onclick="homeGrid()">▦</button>`);
+ let o=(S.tx.length>13||S.notes.length||S.rem.length)&&(!S.lastBackup||daysTo(S.lastBackup)<-7)?`<div class="card row" style="background:#fff4d6;margin-bottom:10px" onclick="homeGrid()"><span style="font-size:22px">💾</span><div class="sp small" style="color:#5a4300"><b>${S.lastBackup?'Đã hơn 7 ngày chưa sao lưu':'Chưa sao lưu dữ liệu'}</b><br>Bấm để sao lưu, tránh mất dữ liệu khi xóa app.</div></div>`:'';o+=hdr(`<span style="font-size:30px">💧</span> Trang chủ`,`<button class="iconbtn" onclick="homeGrid()">▦</button>`);
  if(H.ai)o+=`<div class="card"><div class="row"><div class="sp"><b style="font-size:19px">Javis AI</b>
   <button class="pill" onclick="openCmd();toggleMic()"><i>💬</i>Trò chuyện với AI</button><button class="pill" onclick="openCmd();toggleMic()"><i>🎙</i>Ra lệnh nhanh bằng giọng nói</button><button class="pill" onclick="manualMenu()"><i>✍️</i>Nhập tay</button></div><div class="orb">✦</div></div></div>`;
  o+='<div class="grid2 mt">';
@@ -654,8 +655,27 @@ function fMe(){openForm('Hồ sơ của tôi',[{k:'name',label:'Tên',value:S.me
 function fGoal(){openForm('🎯 Mục tiêu tiết kiệm',[{k:'name',label:'Tên mục tiêu',value:S.goal.name},{k:'target',label:'Số tiền mục tiêu',type:'money',value:S.goal.target||''},{k:'saved',label:'Đã có',type:'money',value:S.goal.saved||''}],v=>{Object.assign(S.goal,v)})}
 function fSave(){openForm('🐷 Bỏ ống heo',[{k:'a',label:'Số tiền',type:'money'}],v=>{const o=S.goal.saved;S.goal.saved+=v.a||0;setTimeout(()=>toast('Đã bỏ ống '+money(v.a),()=>{S.goal.saved=o}),50)})}
 function fFinSet(){openForm('⚙️ Cài đặt tài chính',[{k:'startBal',label:'Số dư ban đầu',type:'money',value:S.startBal||''},{k:'imp',label:'Nhập dữ liệu sao lưu (dán nội dung JSON từ app cũ, không bắt buộc)',type:'textarea'}],v=>{S.startBal=v.startBal||0;if(v.imp){try{const j=JSON.parse(v.imp.slice(v.imp.indexOf('{')));const n=importTx(j.tx||j);setTimeout(()=>toast('Đã nhập '+n+' khoản mới'),50)}catch(e){setTimeout(()=>toast('Dữ liệu sao lưu không đọc được'),50)}}})}
+function backupData(){const data=JSON.stringify({app:'javis',ver:1,at:new Date().toISOString(),state:S});const name='javis-saoluu-'+today()+'.json';
+ const done=()=>{S.lastBackup=today();save();render();toast('Đã tạo file sao lưu '+name)};
+ try{const f=new File([data],name,{type:'application/json'});if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'Sao lưu Javis'}).then(done).catch(e=>{if(e&&e.name!=='AbortError')dlBackup(data,name,done)});return}}catch(e){}
+ dlBackup(data,name,done)}
+function dlBackup(data,name,done){const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},60000);done()}
+let RESTORE=null;
+$('#bkfile').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const rd=new FileReader();rd.onload=()=>{try{let j=JSON.parse(rd.result);const st=j.state||j;if(!st||!Array.isArray(st.tx))throw 0;RESTORE=st;
+  openSheet(`<div class="sh-h"><h3>📂 Khôi phục dữ liệu</h3><button class="x" onclick="closeSheet()">✕</button></div><div class="card"><b>${esc(f.name)}</b><div class="small mt">${j.at?'Sao lưu lúc '+dmy(j.at.slice(0,10))+' · ':''}${st.tx.length} khoản thu chi · ${(st.rem||[]).length} nhắc nhở · ${(st.notes||[]).length} ghi chú · ${(st.habits||[]).length} thói quen · ${(st.people||[]).length} người thân</div></div>
+  <button class="btn wide mt" onclick="doRestore('merge')">➕ Gộp vào dữ liệu hiện tại</button><div class="small" style="margin:4px 6px">Giữ dữ liệu đang có, thêm những mục còn thiếu từ file.</div>
+  <button class="btn ghost wide mt" onclick="doRestore('replace')">🔄 Thay toàn bộ bằng file này</button><div class="small" style="margin:4px 6px">Dữ liệu hiện tại được cất tạm, có thể hoàn tác.</div>`)}catch(err){toast('File không đúng định dạng sao lưu Javis')}};rd.readAsText(f)});
+function doRestore(mode){const st=RESTORE;if(!st)return;const prev=JSON.stringify(S);try{localStorage.setItem('javis_prev',prev)}catch(e){}
+ if(mode==='replace'){S=Object.assign(seed(),st);S.tab='home'}
+ else{['tx','rem','notes','subs','people','receipts'].forEach(k=>{(st[k]||[]).forEach(x=>{if(typeof x==='string'){if(!S[k].includes(x))S[k].push(x)}else if(!S[k].some(y=>y.id===x.id))S[k].push(x)})});
+  (st.habits||[]).forEach(h=>{const m=S.habits.find(y=>y.id===h.id||y.name===h.name);if(!m)S.habits.push(h);else Object.keys(h.log||{}).forEach(d=>m.log[d]=Math.max(m.log[d]||0,h.log[d]))});
+  (st.groups||[]).forEach(g=>{if(!S.groups.includes(g))S.groups.push(g)})}
+ S.imp1=1;S.imp2=1;S.imp3=1;closeSheet();save();render();toast(mode==='replace'?'Đã khôi phục dữ liệu':'Đã gộp dữ liệu',()=>{S=JSON.parse(prev)})}
+function dataSection(){return`<h2>💾 Dữ liệu</h2><div class="card"><div class="small">Dữ liệu chỉ lưu trên máy này. ${S.lastBackup?'Sao lưu lần cuối: <b>'+dmy(S.lastBackup)+'</b>':'<b>Chưa sao lưu lần nào.</b>'}</div>
+ <button class="btn wide mt" onclick="backupData()">💾 Sao lưu dữ liệu</button><div class="small" style="margin:4px 6px">iPhone: chọn <b>Lưu vào Tệp</b>, hoặc gửi qua Zalo/email để cất giữ.</div>
+ <button class="btn ghost wide mt" onclick="$('#bkfile').click()">📂 Khôi phục từ file sao lưu</button></div>`}
 function homeGrid(){const K=[['ai','Thẻ Javis AI'],['rem','Nhắc nhở'],['hab','Thói quen'],['fin','Tài chính'],['sub','Gói đăng ký'],['bday','Sinh nhật sắp tới'],['notes','Ghi chú']];
- openSheet(`<div class="sh-h"><h3>Tùy chỉnh trang chủ</h3><button class="x" onclick="closeSheet()">✕</button></div><div class="card list">${K.map(k=>`<div class="it"><span class="sp">${k[1]}</span><button class="sw ${S.home[k[0]]?'on':''}" onclick="S.home['${k[0]}']=S.home['${k[0]}']?0:1;this.classList.toggle('on');save();render()"></button></div>`).join('')}</div>`)}
+ openSheet(`<div class="sh-h"><h3>Cài đặt</h3><button class="x" onclick="closeSheet()">✕</button></div><div class="card list">${K.map(k=>`<div class="it"><span class="sp">${k[1]}</span><button class="sw ${S.home[k[0]]?'on':''}" onclick="S.home['${k[0]}']=S.home['${k[0]}']?0:1;this.classList.toggle('on');save();render()"></button></div>`).join('')}</div>${dataSection()}`)}
 migrate();initCloud().then(()=>{S.imp2=S.imp2&&!S.tx.some(t=>t.type==='chi'&&(t.cat==='Khác'||!t.tags));migrate()});
 render();
 </script>
