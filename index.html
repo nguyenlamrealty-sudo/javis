@@ -181,7 +181,8 @@ let micBase='';
 const OLD_TX=[{"id": "tmwhkf9ns59ku", "type": "chi", "amt": 16000, "cat": "Ăn uống", "note": "Cafe", "date": "2026-11-15", "time": "15:21", "tags": ["cafe"]}, {"id": "tmwhly2j9xldw", "type": "chi", "amt": 38000, "cat": "Ăn uống", "note": "Cơm cuộn", "date": "2026-11-15", "time": "16:03", "tags": ["cơm"]}, {"id": "tmwhp9qt5ifto", "type": "chi", "amt": 90000, "cat": "Khác", "note": "Cắt tóc", "date": "2026-11-15", "time": "17:36", "tags": []}, {"id": "tmwilwxkgycox", "type": "chi", "amt": 17000, "cat": "Ăn uống", "note": "Cà phê", "date": "2026-11-16", "time": "08:50", "tags": ["cà-phê"]}, {"id": "tmwityudha211", "type": "chi", "amt": 40000, "cat": "Ăn uống", "note": "Cơm trưa", "date": "2026-11-16", "time": "12:36", "tags": ["cơm", "bữa-trưa"]}, {"id": "tmwj5k9qte5cv", "type": "chi", "amt": 32000, "cat": "Khác", "note": "Vịt lộn", "date": "2026-11-16", "time": "18:00", "tags": []}, {"id": "tmwj5o4vgnh5h", "type": "chi", "amt": 80000, "cat": "Đi lại", "note": "Đổ xăng", "date": "2026-11-16", "time": "18:03", "tags": ["đổ-xăng"]}, {"id": "tmwk212vwrul3", "type": "chi", "amt": 250000, "cat": "Khác", "note": "Kích bình", "date": "2026-11-17", "time": "09:09", "tags": []}, {"id": "tmwk21a7n690g", "type": "chi", "amt": 16000, "cat": "Ăn uống", "note": "Cafe", "date": "2026-11-17", "time": "09:09", "tags": ["cafe"]}, {"id": "tmwk2fjxlqvsn", "type": "chi", "amt": 500000, "cat": "Đi lại", "note": "Đổ xăng", "date": "2026-11-17", "time": "09:20", "tags": ["đổ-xăng"]}, {"id": "tmwk7fuml470y", "type": "chi", "amt": 6000, "cat": "Khác", "note": "Photo giấy tờ", "date": "2026-11-17", "time": "11:41", "tags": []}, {"id": "tmwk8m1b2289c", "type": "chi", "amt": 40000, "cat": "Ăn uống", "note": "Ăn trưa bún bò", "date": "2026-11-17", "time": "12:13", "tags": ["ăn-trưa", "bữa-trưa"]}, {"id": "tmwk8unzvwwj9", "type": "chi", "amt": 35000, "cat": "Ăn uống", "note": "Cafe trưa", "date": "2026-11-17", "time": "12:20", "tags": ["cafe", "bữa-trưa"]}];
 function importTx(list){let n=0;(list||[]).forEach(t=>{const id=t.id||uid();if(S.tx.some(x=>x.id===id))return;const amt=+(t.amt??t.amount)||0;if(!amt)return;S.tx.push({id,type:['chi','thu','chovay','divay'].includes(t.type)?t.type:'chi',amt,cat:t.cat||'Khác',note:t.note||t.raw||'',date:(t.date||today()).slice(0,10),time:t.time||'',tags:t.tags||mkTags(t.note),created:t.created||0});n++});return n}
 function migrate2(){if(S.imp2)return;S.tx.forEach(t=>{const o=OLD_TX.find(x=>x.id===t.id);if(o){t.time=t.time||o.time;t.tags=t.tags||o.tags}if(t.type==='chi')t.cat=catOf(t.cat,t.note);if(!t.tags)t.tags=mkTags(t.note)});S.imp2=1;save()}
-function migrate(){if(!S.imp1){importTx(OLD_TX);S.imp1=1}try{const j=JSON.parse(localStorage.getItem('so-chi-tieu.v1')||'null');if(j&&j.tx)importTx(j.tx)}catch(e){}migrate2();save();render()}
+function migrate3(){if(S.imp3)return;S.tx.forEach(t=>{if(t.note&&/(^|\s)(ca|ka)(?=\s|$)/i.test(t.note)){t.note=cap(t.note.replace(/(^|\s)(ca|ka)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim());t.tags=mkTags(t.note)}});S.imp3=1}
+function migrate(){migrate3();if(!S.imp1){importTx(OLD_TX);S.imp1=1}try{const j=JSON.parse(localStorage.getItem('so-chi-tieu.v1')||'null');if(j&&j.tx)importTx(j.tx)}catch(e){}migrate2();save();render()}
 
 // ===== toast/undo =====
 function toast(msg,undo){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.innerHTML=`<span>${esc(msg)}</span>`;
@@ -200,10 +201,21 @@ function submitForm(){const v={};FORM.fields.forEach((f,i)=>{const el=$('#f'+i);
  if(FORM.onSave(v)!==false){closeSheet();save();render()}}
 
 // ===== money / time parsing =====
-function parseMoney(s){s=String(s).toLowerCase().replace(/(\d)\.(\d{3})/g,'$1$2');
- const m=s.match(/(\d+(?:[.,]\d+)?)\s*(triệu|trieu|trăm|tr|củ|nghìn|nghin|ngàn|ngan|k|ng|lít|đồng|đ|d|vnd)?(?![a-zà-ỹđ])(?:\s*(\d+))?/);if(!m)return 0;
+const VND={'không':0,'một':1,'mốt':1,'hai':2,'ba':3,'bốn':4,'tư':4,'năm':5,'lăm':5,'nhăm':5,'sáu':6,'bảy':7,'bẩy':7,'tám':8,'chín':9,'mười':10,'mươi':-10,'trăm':-100,'linh':-1,'lẻ':-1};
+function viWords(seq){let h=0,v=0;seq.trim().split(/\s+/).forEach(w=>{const d=VND[w];if(d===undefined)return;if(d===-10)v=(v||1)*10;else if(d===-100){h+=(v||1)*100;v=0}else if(d>=0)v+=d});return h+v}
+const VNW=Object.keys(VND).join('|');
+function normSpeech(t){t=String(t).normalize('NFC');
+ t=t.replace(new RegExp('(^|[\\s,])((?:(?:'+VNW+')\\s+)+)(nghìn|ngàn|ngan|nghin|triệu|trieu|tỷ|tỉ|k|ca|ka|củ|chục|đồng)(?![a-zà-ỹđ])','gi'),(m,a,w,u)=>{const n=viWords(w.toLowerCase());return n?a+n+' '+u:m});
+ t=t.replace(/(\d)\s*(ca|ka|cá|kà|kha|ká)(?=$|[\s,.;!?])/gi,'$1k');
+ t=t.replace(/(\d)\s*(nghìn|ngàn)\s+đồng/gi,'$1 nghìn');
+ t=t.replace(/(\d+)\s*(triệu|tr|củ)\s*rưỡi/gi,(m,n)=>n+',5 triệu').replace(/(\d+)\s*(nghìn|ngàn|k)\s*rưỡi/gi,(m,n)=>(+n*1000+500)+'đ');
+ t=t.replace(/(\d+)\s*chục(?:\s*(nghìn|ngàn|k))?(?![a-zà-ỹđ])/gi,(m,n)=>(+n*10)+'k');
+ t=t.replace(/(\d+)\s*(lít|xị)(?![a-zà-ỹđ])/gi,(m,n)=>(+n*100)+'k');
+ return t.replace(/\s{2,}/g,' ').trim()}
+function parseMoney(s){s=normSpeech(s).toLowerCase().replace(/(\d)\.(\d{3})/g,'$1$2');
+ const m=s.match(/(\d+(?:[.,]\d+)?)\s*(triệu|trieu|tỷ|tỉ|trăm|tr|củ|nghìn|nghin|ngàn|ngan|k|ng|lít|đồng|đ|d|vnd)?(?![a-zà-ỹđ])(?:\s*(\d+))?/);if(!m)return 0;
  let n=parseFloat(m[1].replace(',','.'));const u=m[2]||'';
- if(/trăm/.test(u))n*=1e5;else if(/triệu|trieu|tr|củ/.test(u)){n*=1e6;if(m[3])n+=Number(m[3])*Math.pow(10,6-m[3].length)}
+ if(/tỷ|tỉ/.test(u))n*=1e9;else if(/trăm/.test(u))n*=1e5;else if(/triệu|trieu|tr|củ/.test(u)){n*=1e6;if(m[3])n+=Number(m[3])*Math.pow(10,6-m[3].length)}
  else if(/nghìn|nghin|ngàn|ngan|^k$|^ng$/.test(u))n*=1e3;else if(/^(đồng|đ|d|vnd)$/.test(u)){}else if(/lít/.test(u))n*=1e5;else if(!u&&n<1000)n*=1e3;return Math.round(n)}
 const WD={'chủ nhật':0,'cn':0,'thứ hai':1,'thứ 2':1,'thứ ba':2,'thứ 3':2,'thứ tư':3,'thứ 4':3,'thứ năm':4,'thứ 5':4,'thứ sáu':5,'thứ 6':5,'thứ bảy':6,'thứ 7':6};
 function parseWhen(t){t=t.toLowerCase();let d=new Date(),h=null,mi=0;
@@ -325,7 +337,7 @@ function cleanTitle(t){let s=t.replace(/^(hãy\s+)?(đặt\s+)?(lời\s+)?(nhắ
  .replace(/\s+(lúc|vào|nhé|nha|nhá)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').replace(/^[\s,.:-]+|[\s,.:-]+$/g,'');return cap(s)||cap(t)}
 const repeatOf=L=>/hằng ngày|mỗi ngày|hàng ngày/.test(L)?'Hằng ngày':/hằng tuần|mỗi tuần|hàng tuần/.test(L)?'Hằng tuần':/hằng tháng|mỗi tháng|hàng tháng/.test(L)?'Hằng tháng':/hằng năm|mỗi năm|hàng năm/.test(L)?'Hằng năm':'Không';
 function moneyDate(L){if(/hôm kia/.test(L))return addD(today(),-2);if(/hôm qua/.test(L))return addD(today(),-1);const d=parseDate(L);if(d)return d;const m=L.match(/(?:ngày\s*)?(\d{1,2})\/(\d{1,2})(?!\/)/);if(m)return new Date().getFullYear()+'-'+pad(m[2])+'-'+pad(m[1]);return today()}
-function localParse(t){t=String(t).normalize('NFC').trim();let L=t.toLowerCase();let m;
+function localParse(t){t=normSpeech(t);let L=t.toLowerCase();let m;
  if(CMD_MODE==='habit'){const n=t.match(/(\d+)\s*([^\d\s,.]+)?/);const name=cap(t.replace(/mỗi ngày|hằng ngày|hàng ngày|thêm thói quen/gi,'').trim());return[{type:'habit_new',name,icon:'⭐',kind:n&&!/giờ|h$/.test(n[2]||'')?'count':'check',target:n?+n[1]:1,unit:n?n[2]||'':''}]}
  if(CMD_MODE==='person'){const bd=parseDate(t);const parts=t.replace(/^thêm\s*/i,'').split(/,|sinh/i).map(x=>x.trim()).filter(Boolean);return[{type:'person_new',name:cap(parts[0]||t),rel:cap(parts[1]&&!/\d/.test(parts[1])?parts[1]:''),ptype:/mẹ|bố|ba|anh|chị|em|con|vợ|chồng|ông|bà|cô|chú|dì|cậu/i.test(t)?'Gia đình':/đồng nghiệp|sếp|khách/i.test(t)?'Công việc':'Bạn bè',birthday:bd,close:false}]}
  if(/^(hoàn tác|hủy|huỷ|xóa|xoá|bỏ)(\s+(lệnh|khoản|cái|mục|thao tác))?(\s+(chi\s+)?(vừa rồi|vừa nãy|vừa xong|cuối|trước|vừa nhập|vừa ghi))?\s*$/.test(L)||/^(hoàn tác|hủy lệnh|huỷ lệnh)/.test(L))return[{type:'undo_last'}];
@@ -369,7 +381,7 @@ function localParse(t){t=String(t).normalize('NFC').trim();let L=t.toLowerCase()
  const items=[];const date=moneyDate(L);const parts=t.split(/,(?!\d)|;|\n|\s+và\s+|\s+với lại\s+/i).map(s=>s.trim()).filter(Boolean);
  parts.forEach(p=>{const amt=parseMoney(p);if(!amt||!/\d/.test(p))return;const l=p.toLowerCase();
   const kind=/cho .+ vay|cho vay/.test(l)?'chovay':/^(đi\s+)?vay|mượn|nợ/.test(l)?'divay':/nhận|lương|thưởng|được cho|hoa hồng|thu nhập|lãi|bán được|thu /.test(l)?'thu':'chi';
-  let note=p.replace(/(\d+(?:[.,]\d+)*)\s*(triệu|trieu|tr|củ|nghìn|nghin|ngàn|ngan|trăm|k|đồng|đ|vnd)?(\s*\d+)?/i,' ').replace(/(^|\s)(hôm qua|hôm kia|hôm nay|ngày \d{1,2}\/\d{1,2}(\/\d{2,4})?|\d{1,2}\/\d{1,2}(\/\d{2,4})?|hết|mất|tốn)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim()||(kind==='thu'?'Thu nhập':'Khoản chi');
+  let note=p.replace(/(\d+(?:[.,]\d+)*)\s*(triệu|trieu|tỷ|tỉ|tr|củ|nghìn|nghin|ngàn|ngan|trăm|k|đồng|đ|vnd)?(?![a-zà-ỹđ])(\s*\d+(?![a-zà-ỹđ]))?/i,' ').replace(/(^|\s)(đồng|vnđ|vnd|ca|ka)(?=\s|$)/gi,' ').replace(/(^|\s)(hôm qua|hôm kia|hôm nay|ngày \d{1,2}\/\d{1,2}(\/\d{2,4})?|\d{1,2}\/\d{1,2}(\/\d{2,4})?|hết|mất|tốn)(?=\s|$)/gi,' ').replace(/\s{2,}/g,' ').trim()||(kind==='thu'?'Thu nhập':'Khoản chi');
   items.push({kind,amt,note:cap(note),cat:kind==='chi'?catOf('',note):kind==='thu'?'Thu nhập':'Vay mượn',date})});
  if(items.length)return[{type:'money',items}];
  if(h)return[{type:'habit',name:h.name,amount:h.target,set:true}];
@@ -382,7 +394,7 @@ function doUndo(id){const u=UNDO[id];if(!u||u.done)return;u.undo();u.done=true;s
 const ACT={
  money(a){const rows=(a.items||[]).filter(i=>i.amt>0).map(i=>{const ty=i.kind||'chi',t={id:uid(),type:ty,amt:+i.amt,cat:ty==='chi'?catOf(i.cat,i.note):(i.cat||'Thu nhập'),note:cap(i.note),date:i.date||today(),time:nowT(),tags:mkTags(i.note),created:Date.now()};S.tx.push(t);
    const sign=t.type==='thu'||t.type==='divay'?'+':'−';const lbl={chi:'',thu:'Thu · ',chovay:'Cho vay · ',divay:'Đi vay · '}[t.type];
-   return undoRow(`💰 <b class="${sign=='+'?'pos':'neg'}">${sign}${Math.round(t.amt).toLocaleString('vi-VN')}</b> · ${lbl}${esc(t.note)}`,()=>{S.tx=S.tx.filter(x=>x.id!==t.id)})}).join('');
+   return undoRow(`💰 <b class="${sign=='+'?'pos':'neg'}">${sign}${Math.round(t.amt).toLocaleString('vi-VN')} đ</b> · ${lbl}${esc(t.note)}<div class="small">${catIcon(t.cat)} ${esc(t.cat)}${t.date!==today()?' · '+dmy(t.date).slice(0,5):''} · <a href="#" onclick="event.preventDefault();closeSheet();fTx(S.tx.find(x=>x.id==='${t.id}'))" style="color:var(--blue)">Sửa</a></div>`,()=>{S.tx=S.tx.filter(x=>x.id!==t.id)})}).join('');
   return{html:()=>rows||'Không thấy số tiền.'}},
  reminder(a){const r={id:uid(),title:a.title||'Nhắc nhở',at:a.at||parseWhen(''),repeat:a.repeat||'Không'};const id=uid();PEND[id]={r};
   return{html:()=>PEND[id].saved?undoRowCached(id):`<div><b>🔔 Lịch hẹn / nhắc nhở</b></div><div class="cbox"><input id="rt${id}" value="${esc(r.title)}" style="border:0;background:none;width:100%;font-size:15px"></div>
@@ -644,7 +656,7 @@ function fSave(){openForm('🐷 Bỏ ống heo',[{k:'a',label:'Số tiền',type
 function fFinSet(){openForm('⚙️ Cài đặt tài chính',[{k:'startBal',label:'Số dư ban đầu',type:'money',value:S.startBal||''},{k:'imp',label:'Nhập dữ liệu sao lưu (dán nội dung JSON từ app cũ, không bắt buộc)',type:'textarea'}],v=>{S.startBal=v.startBal||0;if(v.imp){try{const j=JSON.parse(v.imp.slice(v.imp.indexOf('{')));const n=importTx(j.tx||j);setTimeout(()=>toast('Đã nhập '+n+' khoản mới'),50)}catch(e){setTimeout(()=>toast('Dữ liệu sao lưu không đọc được'),50)}}})}
 function homeGrid(){const K=[['ai','Thẻ Javis AI'],['rem','Nhắc nhở'],['hab','Thói quen'],['fin','Tài chính'],['sub','Gói đăng ký'],['bday','Sinh nhật sắp tới'],['notes','Ghi chú']];
  openSheet(`<div class="sh-h"><h3>Tùy chỉnh trang chủ</h3><button class="x" onclick="closeSheet()">✕</button></div><div class="card list">${K.map(k=>`<div class="it"><span class="sp">${k[1]}</span><button class="sw ${S.home[k[0]]?'on':''}" onclick="S.home['${k[0]}']=S.home['${k[0]}']?0:1;this.classList.toggle('on');save();render()"></button></div>`).join('')}</div>`)}
-migrate();initCloud().then(()=>{S.imp1=S.imp1&&S.tx.some(x=>x.id===OLD_TX[0].id);S.imp2=S.imp2&&!S.tx.some(t=>t.type==='chi'&&(t.cat==='Khác'||!t.tags));migrate()});
+migrate();initCloud().then(()=>{S.imp2=S.imp2&&!S.tx.some(t=>t.type==='chi'&&(t.cat==='Khác'||!t.tags));migrate()});
 render();
 </script>
 </body>
